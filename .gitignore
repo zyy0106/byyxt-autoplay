@@ -1,0 +1,18 @@
+# 运行时生成的本地文件
+node_modules/
+pylibs/
+.profile/
+tmp/
+result.json
+.run.lock
+
+# 本地私有配置(不要提交)
+config.json
+config.local.json
+
+# Python
+__pycache__/
+*.pyc
+
+# 其他
+.DS_Store

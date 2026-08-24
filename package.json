@@ -1,0 +1,26 @@
+{
+  "name": "byyxt-autoplay",
+  "version": "1.0.0",
+  "description": "自动播放 byyxt.pupedu.cn(北大云学堂 / Readoor 平台)培训视频的油猴脚本与命令行工具",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "byyxt",
+    "pupedu",
+    "readoor",
+    "video",
+    "autoplay",
+    "tampermonkey",
+    "captcha-ocr"
+  ],
+  "scripts": {
+    "start": "node start.js",
+    "check": "node --check start.js && node --check byyxt-autoplay.user.js && node --check src/env.js && node --check src/captcha.js && node --check src/login.js && node --check src/runner.js"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

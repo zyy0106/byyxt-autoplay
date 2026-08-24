@@ -1,0 +1,18 @@
+{
+  "targetUrl": "https://byyxt.pupedu.cn/你的APP_GUID/statudentsHomeDetails?training_id=你的培训ID&spu_guid=你的课程ID",
+  "account": "",
+  "password": "",
+  "playbackRate": 16,
+  "mute": true,
+  "fastSeek": false,
+  "headless": true,
+  "browser": "auto",
+  "limit": 0,
+  "timeoutMs": 28800000,
+  "maxWatchMs": 2700000,
+  "profileDir": ".profile",
+  "python": "",
+  "playwrightModuleDir": "",
+  "ocrDepsDir": "pylibs",
+  "maxCaptchaAttempts": 8
+}
