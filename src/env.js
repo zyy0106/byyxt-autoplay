@@ -39,6 +39,18 @@ export function resolvePython(config) {
   return { python: '', pythonArgs: [] };
 }
 
+function pythonVersionTag(python, pythonArgs) {
+  // 返回形如 313 的数字(3.13 -> 313),探测失败返回 0
+  try {
+    const r = spawnSync(python, [...pythonArgs, '-c',
+      'import sys;print("%d%02d"%sys.version_info[:2])'],
+      { encoding: 'utf8', timeout: 15000 });
+    const m = String(r.stdout || '').trim().match(/^(\d{3,})$/);
+    if (r.status === 0 && m) return Number(m[1]);
+  } catch {}
+  return 0;
+}
+
 function resolveNpmCli(npmPath) {
   // npm.cmd 只是包装脚本,真正的入口是 npm-cli.js;
   // 直接用 node 执行它可以避免 Windows 下带空格路径被 cmd 截断的问题。
@@ -121,10 +133,21 @@ export async function ensureDependencies(config, log) {
       { env: { ...process.env, PYTHONPATH: ocrDepsDir }, stdio: 'ignore', timeout: 30000 });
     if (check.status !== 0) {
       log('未检测到验证码识别依赖,正在自动安装(需联网)…');
-      const r = spawnSync(python, [...pythonArgs, '-m', 'pip', 'install',
+      // ddddocr 1.5.x 与 numpy 1.26 均没有 Python>=3.13 的包,按版本选择可用组合;
+      // 固定组合失败时降级为让 pip 自动解析版本(可装上 ddddocr 1.6.x + numpy 2.x)。
+      const ver = pythonVersionTag(python, pythonArgs);
+      const numpySpec = ver >= 313 ? 'numpy>=2.1' : 'numpy==1.26.4';
+      let r = spawnSync(python, [...pythonArgs, '-m', 'pip', 'install',
         '--disable-pip-version-check', '--no-warn-script-location', '--target', ocrDepsDir,
-        'ddddocr==1.5.6', 'numpy==1.26.4'],
+        'ddddocr==1.5.6', numpySpec],
         { cwd: projectDir, stdio: 'inherit' });
+      if (r.status !== 0) {
+        log('按固定版本安装失败,改为自动解析版本重试…');
+        r = spawnSync(python, [...pythonArgs, '-m', 'pip', 'install',
+          '--disable-pip-version-check', '--no-warn-script-location', '--target', ocrDepsDir,
+          'ddddocr'],
+          { cwd: projectDir, stdio: 'inherit' });
+      }
       if (r.status === 0) {
         const recheck = spawnSync(python, [...pythonArgs, '-c', 'import ddddocr'],
           { env: { ...process.env, PYTHONPATH: ocrDepsDir }, stdio: 'ignore', timeout: 30000 });
