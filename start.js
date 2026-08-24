@@ -32,6 +32,8 @@ const DEFAULTS = {
   playwrightModuleDir: '',
   ocrDepsDir: 'pylibs',
   maxCaptchaAttempts: 8,
+  autoReloginOnLimit: true,
+  maxAutoRelogin: 2,
 };
 
 function loadConfig() {
@@ -312,6 +314,7 @@ async function main() {
 
   const hooks = {
     relogin: () => login.ensureLogin(page, loginOpts),
+    forceRelogin: () => login.ensureLogin(page, { ...loginOpts, force: true }),
     onProgress: data => reporter.update(data),
   };
   const fin = await runner.run(page, ctx, config, hooks, log);

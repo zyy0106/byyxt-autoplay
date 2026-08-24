@@ -98,6 +98,8 @@ export async function run(page, ctx, config, hooks, log) {
   let stopped = false;
   let final = null;
   let stopReason = null;
+  let reloginTries = 0;
+  const maxAutoRelogin = Number(config.maxAutoRelogin ?? 2);
   const parseCurrent = status => {
     const a = /打开: (.+)$/.exec(status || '');
     if (a) return a[1];
@@ -126,20 +128,31 @@ export async function run(page, ctx, config, hooks, log) {
           ? `进度 ${done}/${total} (${pct}%) · 剩余 ${total - done} · ${eta} · 状态: ${s.status}`
           : `状态: ${s.status}`);
       }
-      if (authIssue) {
-        log('⚠ 因登录失效停止:请在其他设备退出登录(或等待平台解除限制)后重新运行');
-        await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
-        stopReason = 'auth';
+      if ((authIssue || s.limited) && !stopped) {
+        const allowAutoRelogin = config.autoReloginOnLimit !== false && typeof hooks.forceRelogin === 'function';
+        if (!allowAutoRelogin || reloginTries >= maxAutoRelogin) {
+          log('⚠ 检测到该账号存在其他登录(设备数超限),且无法自动顶替,已停止。请在其他设备退出登录后重试');
+          await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
+          stopped = true;
+          stopReason = authIssue ? 'auth' : 'limited';
+          await sleep(4000);
+          break;
+        }
+        reloginTries++;
+        log(`⚠ 检测到其他登录(设备数超限),自动重新登录(第 ${reloginTries} 次)以顶掉最旧的其它会话…`);
+        const ok = await hooks.forceRelogin().catch(() => false);
+        if (!ok) {
+          log('⚠ 自动重新登录失败,已停止。请在其他设备退出登录后重试');
+          await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
+          stopped = true;
+          stopReason = 'auth';
+          await sleep(4000);
+          break;
+        }
+        authIssue = false;
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
         await sleep(4000);
-        break;
-      }
-      if (s.limited && !stopped) {
-        log('⚠ 警告:检测到该账号存在其他登录(登录设备数超限),平台可能拒绝完成上报,已停止。请在其他设备退出登录后重试');
-        await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
-        stopped = true;
-        stopReason = 'limited';
-        await sleep(4000);
-        break;
+        continue;
       }
       if (hooks.onProgress) {
         try {

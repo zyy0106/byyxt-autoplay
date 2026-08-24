@@ -14,5 +14,7 @@
   "python": "",
   "playwrightModuleDir": "",
   "ocrDepsDir": "pylibs",
-  "maxCaptchaAttempts": 8
+  "maxCaptchaAttempts": 8,
+  "autoReloginOnLimit": true,
+  "maxAutoRelogin": 2
 }

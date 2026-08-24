@@ -188,10 +188,19 @@ async function passwordLogin(page, opts) {
 }
 
 export async function ensureLogin(page, opts) {
-  const { targetUrl, config, log } = opts;
-  if (await hasToken(page, targetUrl)) {
+  const { targetUrl, config, log, force } = opts;
+  if (!force && await hasToken(page, targetUrl)) {
     log('已处于登录状态,跳过登录');
     return true;
+  }
+  if (force) {
+    // 强制全新登录:清掉本地旧 token,使本次登录在平台侧顶掉最旧的其它会话
+    const guid = appGuidFrom(targetUrl);
+    await page.evaluate(g => {
+      try { localStorage.removeItem('token_' + g); } catch {}
+    }, guid).catch(() => {});
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await sleep(4000);
   }
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await sleep(6000);
