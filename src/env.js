@@ -38,6 +38,39 @@ export function resolvePython(config) {
   return { python: '', pythonArgs: [] };
 }
 
+function resolveNpmCli(npmPath) {
+  // npm.cmd 只是包装脚本,真正的入口是 npm-cli.js;
+  // 直接用 node 执行它可以避免 Windows 下带空格路径被 cmd 截断的问题。
+  const dir = path.dirname(npmPath);
+  const candidates = [
+    path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  for (const c of candidates) {
+    try { if (fs.existsSync(c)) return c; } catch {}
+  }
+  return null;
+}
+
+export function runNpm(args, cwd) {
+  const npm = findExecutable(['npm', 'npm.cmd']);
+  if (!npm) return null;
+
+  // 首选:用 node 直接执行 npm-cli.js(不经过 shell,路径带空格也安全)
+  const cliJs = resolveNpmCli(npm);
+  if (cliJs && process.execPath) {
+    return spawnSync(process.execPath, [cliJs, ...args], { cwd, stdio: 'inherit' });
+  }
+
+  // 兜底:经 cmd 执行,路径用引号包裹
+  if (process.platform === 'win32') {
+    const command = '""' + npm + '" ' + args.join(' ') + '"';
+    return spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command],
+      { cwd, stdio: 'inherit' });
+  }
+  return spawnSync(npm, args, { cwd, stdio: 'inherit' });
+}
+
 export async function ensureDependencies(config, log) {
   // 1) Playwright
   let pw = null;
@@ -58,10 +91,8 @@ export async function ensureDependencies(config, log) {
   }
   if (!pw) {
     log('未检测到 Playwright,正在自动安装(约 10MB,需联网)…');
-    const npm = findExecutable(['npm', 'npm.cmd']);
-    if (!npm) throw new Error('未找到 npm。请先安装 Node.js(含 npm):https://nodejs.org/');
-    const r = spawnSync(npm, ['install', '--no-save', '--no-audit', '--no-fund', 'playwright@1.62.1'],
-      { cwd: projectDir, stdio: 'inherit', shell: process.platform === 'win32' });
+    const r = runNpm(['install', '--no-save', '--no-audit', '--no-fund', 'playwright@1.62.1'], projectDir);
+    if (!r) throw new Error('未找到 npm。请先安装 Node.js(含 npm):https://nodejs.org/');
     if (r.status !== 0) throw new Error('Playwright 安装失败,请检查网络后重试');
     try {
       pw = createRequire(path.join(projectDir, 'node_modules', 'playwright', 'package.json'))('playwright');
