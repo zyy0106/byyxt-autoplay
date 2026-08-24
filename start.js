@@ -91,14 +91,20 @@ const rl = readline.createInterface({
   terminal: !!process.stdin.isTTY,
 });
 let pendingResolver = null;
+const pendingLines = [];
+let inputEof = false;
 rl.on('line', line => {
+  line = line.replace(/^\uFEFF/, '');
   if (pendingResolver) {
     const r = pendingResolver;
     pendingResolver = null;
     r(line);
+  } else {
+    pendingLines.push(line);
   }
 });
 rl.on('close', () => {
+  inputEof = true;
   if (pendingResolver) {
     const r = pendingResolver;
     pendingResolver = null;
@@ -108,7 +114,11 @@ rl.on('close', () => {
 
 function ask(question) {
   process.stdout.write(question);
-  return new Promise(resolve => { pendingResolver = resolve; });
+  return new Promise(resolve => {
+    if (inputEof) return resolve('');
+    if (pendingLines.length) return resolve(pendingLines.shift());
+    pendingResolver = resolve;
+  });
 }
 
 function askHidden(question) {
@@ -144,8 +154,9 @@ function askHidden(question) {
       // 不支持 raw mode 时退化为明文输入
       process.stdout.write('\n');
       rl.resume();
-      const r = resolve;
-      pendingResolver = r;
+      if (inputEof) return resolve('');
+      if (pendingLines.length) return resolve(pendingLines.shift());
+      pendingResolver = resolve;
     }
   });
 }
