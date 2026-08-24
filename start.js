@@ -185,6 +185,27 @@ function openImage(p) {
   } catch {}
 }
 
+function normalizeTargetUrl(raw) {
+  try {
+    const u = new URL(raw);
+    const seg = u.pathname.split('/').filter(Boolean);
+    const appGuid = seg[0] || '';
+    const trainingId = u.searchParams.get('training_id');
+    const spuGuid = u.searchParams.get('spu_guid');
+    // 用户常把“课程播放页”地址贴进来,自动转换为任务详情页
+    if (/c\/pc\/viewer|e-textbook2/.test(u.pathname) && trainingId && spuGuid) {
+      const fixed = `${u.origin}/${appGuid}/statudentsHomeDetails?training_id=${encodeURIComponent(trainingId)}&spu_guid=${encodeURIComponent(spuGuid)}`;
+      return { url: fixed, corrected: true };
+    }
+    if (!/statudentsHomeDetails/.test(u.pathname)) {
+      return { url: null, corrected: false, error: '地址不是培训任务详情页。请打开“培训任务详情页”后复制地址栏(地址应包含 statudentsHomeDetails)' };
+    }
+    return { url: u.toString(), corrected: false };
+  } catch {
+    return { url: null, corrected: false, error: '地址无法解析,请复制以 https:// 开头的完整地址' };
+  }
+}
+
 /* ---------------- 运行锁与清理 ---------------- */
 const lockPath = path.join(__dirname, '.run.lock');
 let captcha = null;
@@ -229,7 +250,7 @@ async function main() {
   };
 
   if (!config.targetUrl) {
-    const t = (await ask('请粘贴任务详情页地址(在浏览器打开培训任务页,复制地址栏整行): ')).trim();
+    const t = (await ask('请粘贴【培训任务详情页】地址(在浏览器打开该培训的任务页,复制地址栏整行,地址应包含 statudentsHomeDetails): ')).trim();
     if (!/^https?:\/\//.test(t)) {
       console.error('[byyxt] 地址格式不正确,应以 https:// 开头,请重新运行');
       await cleanup(1);
@@ -247,6 +268,16 @@ async function main() {
       log('保存 config.json 失败(不影响本次运行): ' + e.message);
     }
   }
+  const norm = normalizeTargetUrl(config.targetUrl);
+  if (norm.error) {
+    console.error('[byyxt] ' + norm.error);
+    await cleanup(1);
+    return;
+  }
+  if (norm.corrected) {
+    log('检测到粘贴的是课程播放页地址,已自动转换为任务详情页: ' + norm.url);
+  }
+  config.targetUrl = norm.url;
   if (fs.existsSync(lockPath) && !config.force) {
     let stale = false;
     try {

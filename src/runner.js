@@ -100,6 +100,7 @@ export async function run(page, ctx, config, hooks, log) {
   let stopReason = null;
   let reloginTries = 0;
   const maxAutoRelogin = Number(config.maxAutoRelogin ?? 2);
+  let idleStart = null;
   const parseCurrent = status => {
     const a = /打开: (.+)$/.exec(status || '');
     if (a) return a[1];
@@ -153,6 +154,17 @@ export async function run(page, ctx, config, hooks, log) {
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
         await sleep(4000);
         continue;
+      }
+      // 页面既不是任务列表、脚本也没启动(常见于地址贴成了播放页):限时明确报错
+      if (!s.status && !s.onList) {
+        idleStart = idleStart ?? Date.now();
+        if (Date.now() - idleStart > 45000) {
+          log('⚠ 当前页面不是培训任务详情页,无法自动开始。请在“培训任务详情页”复制地址(以 statudentsHomeDetails 结尾)后重试');
+          stopReason = 'wrong-page';
+          break;
+        }
+      } else {
+        idleStart = null;
       }
       if (hooks.onProgress) {
         try {
