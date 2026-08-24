@@ -21,7 +21,6 @@ if errorlevel 1 (
 echo Starting...
 echo First run downloads dependencies (about 150MB, internet required, one time only).
 echo Keep this window open until it finishes.
-echo Live progress page: http://127.0.0.1:8899
 echo.
 node start.js %*
 

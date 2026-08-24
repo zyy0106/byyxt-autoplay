@@ -14,7 +14,5 @@
   "python": "",
   "playwrightModuleDir": "",
   "ocrDepsDir": "pylibs",
-  "maxCaptchaAttempts": 8,
-  "progressPort": 8899,
-  "progressAutoOpen": true
+  "maxCaptchaAttempts": 8
 }

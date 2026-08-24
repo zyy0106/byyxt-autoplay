@@ -71,8 +71,6 @@ node start.js
 | `maxWatchMs` | 单视频最长等待,超时跳过继续 | 45 分钟 |
 | `profileDir` | 浏览器会话目录(登录态保存在此,重启免登录) | `.profile` |
 | `maxCaptchaAttempts` | 验证码最大尝试次数 | 8 |
-| `progressPort` | 实时进度网页端口 | 8899 |
-| `progressAutoOpen` | 启动后自动用浏览器打开进度页 | true |
 | `python` / `playwrightModuleDir` / `ocrDepsDir` | 高级:自定义运行环境路径,一般留空自动检测 | 空 |
 
 可选的本机特调文件 `config.local.json`(已 gitignore)会覆盖 `config.json`,适合保存机器相关路径。
@@ -92,8 +90,7 @@ node start.js --help
 ## 实时进度
 
 - 运行时黑色窗口会持续显示:已完成数量、百分比、剩余数量、预计剩余时间、当前视频;
-- 程序还会自动打开一个本地进度网页(默认 `http://127.0.0.1:8899`,可用 `progressAutoOpen` / `progressPort` 控制),浏览器里能看到进度条和实时日志,每 2 秒自动刷新;
-- 进度同时写入 `progress.json`,供其他程序读取;
+- 进度同时写入 `progress.json`(实时覆盖),供其他程序读取;
 - 结束后的汇总写入 `result.json`。
 
 ## 油猴脚本(替代方案)

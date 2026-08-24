@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ensureDependencies } from './src/env.js';
 import { CaptchaService } from './src/captcha.js';
@@ -11,10 +11,7 @@ import { ProgressReporter } from './src/reporter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let reporter = null;
-const log = (...a) => {
-  console.log('[byyxt]', ...a);
-  try { reporter?.line(a.map(String).join(' ')); } catch {}
-};
+const log = (...a) => console.log('[byyxt]', ...a);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ---------------- 配置 ---------------- */
@@ -35,8 +32,6 @@ const DEFAULTS = {
   playwrightModuleDir: '',
   ocrDepsDir: 'pylibs',
   maxCaptchaAttempts: 8,
-  progressPort: 8899,
-  progressAutoOpen: true,
 };
 
 function loadConfig() {
@@ -139,7 +134,7 @@ function askHidden(question) {
       const s = c.toString('utf8');
       for (const ch of s) {
         if (ch === '\r' || ch === '\n') return finish(buf);
-        if (ch === '\u0003') { finish(''); process.exit(130); }
+        if (ch === '\u0003') { process.stdout.write('\n'); cleanup(130); }
         if (ch === '\b' || ch === '\u007f') buf = buf.slice(0, -1);
         else buf += ch;
       }
@@ -161,6 +156,21 @@ function askHidden(question) {
   });
 }
 
+function isLockAlive(pid) {
+  if (process.platform !== 'win32') {
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  }
+  // Windows 上 PID 可能被复用,需核对命令行确认是我们的进程
+  try {
+    const r = spawnSync('powershell', ['-NoProfile', '-Command',
+      `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`],
+      { stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 });
+    return r.status === 0 && /start\.js/.test(String(r.stdout || ''));
+  } catch {
+    return true;
+  }
+}
+
 function openImage(p) {
   try {
     if (process.platform === 'win32') {
@@ -169,18 +179,6 @@ function openImage(p) {
       spawn('open', [p], { detached: true, stdio: 'ignore' }).unref();
     } else {
       spawn('xdg-open', [p], { detached: true, stdio: 'ignore' }).unref();
-    }
-  } catch {}
-}
-
-function openUrl(u) {
-  try {
-    if (process.platform === 'win32') {
-      spawn('cmd', ['/c', 'start', '', u], { detached: true, stdio: 'ignore' }).unref();
-    } else if (process.platform === 'darwin') {
-      spawn('open', [u], { detached: true, stdio: 'ignore' }).unref();
-    } else {
-      spawn('xdg-open', [u], { detached: true, stdio: 'ignore' }).unref();
     }
   } catch {}
 }
@@ -226,7 +224,8 @@ async function main() {
     const t = (await ask('请粘贴任务详情页地址(在浏览器打开培训任务页,复制地址栏整行): ')).trim();
     if (!/^https?:\/\//.test(t)) {
       console.error('[byyxt] 地址格式不正确,应以 https:// 开头,请重新运行');
-      process.exit(1);
+      await cleanup(1);
+      return;
     }
     config.targetUrl = t;
     try {
@@ -241,15 +240,23 @@ async function main() {
     }
   }
   if (fs.existsSync(lockPath) && !config.force) {
-    console.error('[byyxt] 检测到另一个实例正在运行(.run.lock)。确认没有其他实例后,删除该文件或加 --force 重试');
-    process.exit(1);
+    let stale = false;
+    try {
+      const pid = Number(fs.readFileSync(lockPath, 'utf8'));
+      if (!Number.isFinite(pid) || !isLockAlive(pid)) stale = true;
+    } catch { stale = true; }
+    if (stale) {
+      try { fs.rmSync(lockPath, { force: true }); } catch {}
+      log('检测到上次运行残留的锁文件,已自动清理');
+    } else {
+      console.error('[byyxt] 检测到另一个实例正在运行(.run.lock)。确认没有其他实例后,删除该文件或加 --force 重试');
+      process.exit(1);
+    }
   }
   fs.writeFileSync(lockPath, String(process.pid));
 
   reporter = new ProgressReporter({
     projectDir: __dirname,
-    port: Number(config.progressPort || 8899),
-    log,
   });
 
   if (!config.account) config.account = (await ask('请输入账号(学号/手机号/邮箱): ')).trim();
@@ -261,10 +268,6 @@ async function main() {
   }
 
   log('正在检查运行环境…');
-  reporter.start();
-  if (config.progressAutoOpen !== false && process.env.BYYXT_PROGRESS_AUTO_OPEN !== '0') {
-    openUrl(`http://127.0.0.1:${reporter.actualPort}`);
-  }
   const env = await ensureDependencies(config, log);
   log(`运行环境就绪。验证码 OCR:${env.ocrReady ? '可用' : '不可用(将人工输入)'}`);
 
