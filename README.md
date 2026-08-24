@@ -33,17 +33,27 @@
 
 ## 快速开始
 
-前置要求:[Node.js ≥ 18](https://nodejs.org/)。Python 可选(没有时验证码转人工输入)。
+**第一次用,照着这份图文步骤走即可,不用懂电脑:**
+
+1. 安装 [Node.js](https://nodejs.org/zh-cn)(下载 LTS 版,一路下一步);
+2. 在本仓库点绿色 **“<> Code” → “Download ZIP”**,解压;
+3. 双击 **`start.bat`**(Windows);
+4. 黑窗口里按提示:粘贴任务页地址 → 输入账号 → 输入密码;
+5. 等它自动完成即可。
+
+→ 更详细的逐步骤说明(含截图位置描述、验证码、常见问题):[docs/新手指南.md](docs/新手指南.md)
+
+**稍微熟悉命令行**的用户也可以:
 
 ```bash
-# 1. 配置:复制模板并填写任务页地址(账号密码可留空,运行时输入)
-cp config.example.json config.json        # Windows: copy config.example.json config.json
-
-# 2. 运行(Windows 也可直接双击 start.bat)
+git clone https://github.com/zyy0106/byyxt-autoplay.git
+cd byyxt-autoplay
+cp config.example.json config.json   # 填 targetUrl(或留空,运行时粘贴)
+npm install                          # 可选,程序也会自动装
 node start.js
 ```
 
-首次运行会自动安装缺失的依赖(Playwright、Chromium、ddddocr),之后直接秒开。
+首次运行会自动安装缺失的依赖(Playwright、Chromium、验证码识别库),之后直接秒开。
 
 ## 配置(config.json)
 
@@ -61,6 +71,8 @@ node start.js
 | `maxWatchMs` | 单视频最长等待,超时跳过继续 | 45 分钟 |
 | `profileDir` | 浏览器会话目录(登录态保存在此,重启免登录) | `.profile` |
 | `maxCaptchaAttempts` | 验证码最大尝试次数 | 8 |
+| `progressPort` | 实时进度网页端口 | 8899 |
+| `progressAutoOpen` | 启动后自动用浏览器打开进度页 | true |
 | `python` / `playwrightModuleDir` / `ocrDepsDir` | 高级:自定义运行环境路径,一般留空自动检测 | 空 |
 
 可选的本机特调文件 `config.local.json`(已 gitignore)会覆盖 `config.json`,适合保存机器相关路径。
@@ -76,6 +88,13 @@ node start.js --help
 ```
 
 环境变量:`BYYXT_ACCOUNT`、`BYYXT_PASSWORD`、`BYYXT_TARGET`、`BYYXT_LIMIT`、`BYYXT_BROWSER`、`BYYXT_PYTHON`。
+
+## 实时进度
+
+- 运行时黑色窗口会持续显示:已完成数量、百分比、剩余数量、预计剩余时间、当前视频;
+- 程序还会自动打开一个本地进度网页(默认 `http://127.0.0.1:8899`,可用 `progressAutoOpen` / `progressPort` 控制),浏览器里能看到进度条和实时日志,每 2 秒自动刷新;
+- 进度同时写入 `progress.json`,供其他程序读取;
+- 结束后的汇总写入 `result.json`。
 
 ## 油猴脚本(替代方案)
 

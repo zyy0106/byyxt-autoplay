@@ -82,6 +82,12 @@ export async function run(page, ctx, config, hooks, log) {
   let lastKey = '';
   let stopped = false;
   let final = null;
+  const parseCurrent = status => {
+    const a = /打开: (.+)$/.exec(status || '');
+    if (a) return a[1];
+    const b = /播放中: (.+)$/.exec(status || '');
+    return b ? b[1] : '';
+  };
 
   while (true) {
     const s = await snapshot();
@@ -89,10 +95,35 @@ export async function run(page, ctx, config, hooks, log) {
       final = s;
       const total = s.state.totalPending ?? null;
       const done = s.state.doneCount ?? 0;
+      const currentName = parseCurrent(s.status);
+      const pct = total ? Math.min(100, Math.round(done / total * 100)) : null;
+      let eta = '';
+      if (total && done > 0) {
+        const per = (Date.now() - start) / done;
+        const mins = Math.round((total - done) * per / 60000);
+        eta = mins > 0 ? `预计约 ${mins} 分钟` : '即将完成';
+      }
       const key = `${s.url.slice(0, 110)}|${s.status}|${s.pending}`;
       if (key !== lastKey) {
         lastKey = key;
-        log(`待处理=${s.pending}${total ? `/${total}` : ''} 已处理=${done} "${s.status}"`);
+        log(pct !== null
+          ? `进度 ${done}/${total} (${pct}%) · 剩余 ${total - done} · ${eta} · 状态: ${s.status}`
+          : `状态: ${s.status}`);
+      }
+      if (hooks.onProgress) {
+        try {
+          hooks.onProgress({
+            time: new Date().toISOString(),
+            status: s.status,
+            done,
+            total,
+            pending: s.pending,
+            currentName,
+            url: s.url,
+            pct,
+            eta,
+          });
+        } catch {}
       }
 
       // 登录态丢失 → 自动重新登录
@@ -151,5 +182,22 @@ export async function run(page, ctx, config, hooks, log) {
     await sleep(3000);
   }
 
-  return await snapshot();
+  final = await snapshot();
+  if (hooks.onProgress) {
+    try {
+      hooks.onProgress({
+        time: new Date().toISOString(),
+        status: final?.status,
+        done: final?.state?.doneCount ?? 0,
+        total: final?.state?.totalPending ?? null,
+        pending: final?.pending,
+        currentName: parseCurrent(final?.status),
+        url: final?.url,
+        pct: final?.state?.totalPending ? Math.min(100, Math.round((final.state.doneCount || 0) / final.state.totalPending * 100)) : null,
+        eta: '',
+        finished: true,
+      });
+    } catch {}
+  }
+  return final;
 }

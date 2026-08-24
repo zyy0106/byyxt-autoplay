@@ -7,9 +7,14 @@ import { ensureDependencies } from './src/env.js';
 import { CaptchaService } from './src/captcha.js';
 import * as login from './src/login.js';
 import * as runner from './src/runner.js';
+import { ProgressReporter } from './src/reporter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const log = (...a) => console.log('[byyxt]', ...a);
+let reporter = null;
+const log = (...a) => {
+  console.log('[byyxt]', ...a);
+  try { reporter?.line(a.map(String).join(' ')); } catch {}
+};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ---------------- 配置 ---------------- */
@@ -30,6 +35,8 @@ const DEFAULTS = {
   playwrightModuleDir: '',
   ocrDepsDir: 'pylibs',
   maxCaptchaAttempts: 8,
+  progressPort: 8899,
+  progressAutoOpen: true,
 };
 
 function loadConfig() {
@@ -130,12 +137,25 @@ function openImage(p) {
   } catch {}
 }
 
+function openUrl(u) {
+  try {
+    if (process.platform === 'win32') {
+      spawn('cmd', ['/c', 'start', '', u], { detached: true, stdio: 'ignore' }).unref();
+    } else if (process.platform === 'darwin') {
+      spawn('open', [u], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      spawn('xdg-open', [u], { detached: true, stdio: 'ignore' }).unref();
+    }
+  } catch {}
+}
+
 /* ---------------- 运行锁与清理 ---------------- */
 const lockPath = path.join(__dirname, '.run.lock');
 let captcha = null;
 let contextHandle = null;
 
 async function cleanup(code) {
+  try { reporter?.stop(); } catch {}
   try { captcha?.stop(); } catch {}
   try { await contextHandle?.close(); } catch {}
   try { fs.rmSync(lockPath, { force: true }); } catch {}
@@ -167,14 +187,34 @@ async function main() {
   };
 
   if (!config.targetUrl) {
-    console.error('[byyxt] 未配置 targetUrl。请在 config.json 填写任务详情页地址,或用 --target 指定');
-    process.exit(1);
+    const t = (await ask('请粘贴任务详情页地址(在浏览器打开培训任务页,复制地址栏整行): ')).trim();
+    if (!/^https?:\/\//.test(t)) {
+      console.error('[byyxt] 地址格式不正确,应以 https:// 开头,请重新运行');
+      process.exit(1);
+    }
+    config.targetUrl = t;
+    try {
+      let cfgJson = {};
+      const p = path.join(__dirname, 'config.json');
+      if (fs.existsSync(p)) cfgJson = JSON.parse(fs.readFileSync(p, 'utf8'));
+      cfgJson.targetUrl = t;
+      fs.writeFileSync(p, JSON.stringify(cfgJson, null, 2), 'utf8');
+      log('已把任务地址保存到 config.json,下次运行无需再填');
+    } catch (e) {
+      log('保存 config.json 失败(不影响本次运行): ' + e.message);
+    }
   }
   if (fs.existsSync(lockPath) && !config.force) {
     console.error('[byyxt] 检测到另一个实例正在运行(.run.lock)。确认没有其他实例后,删除该文件或加 --force 重试');
     process.exit(1);
   }
   fs.writeFileSync(lockPath, String(process.pid));
+
+  reporter = new ProgressReporter({
+    projectDir: __dirname,
+    port: Number(config.progressPort || 8899),
+    log,
+  });
 
   if (!config.account) config.account = (await ask('请输入账号(学号/手机号/邮箱): ')).trim();
   if (!config.password) config.password = await askHidden('请输入密码(输入不回显): ');
@@ -185,6 +225,10 @@ async function main() {
   }
 
   log('正在检查运行环境…');
+  reporter.start();
+  if (config.progressAutoOpen !== false && process.env.BYYXT_PROGRESS_AUTO_OPEN !== '0') {
+    openUrl(`http://127.0.0.1:${reporter.actualPort}`);
+  }
   const env = await ensureDependencies(config, log);
   log(`运行环境就绪。验证码 OCR:${env.ocrReady ? '可用' : '不可用(将人工输入)'}`);
 
@@ -221,7 +265,10 @@ async function main() {
     return;
   }
 
-  const hooks = { relogin: () => login.ensureLogin(page, loginOpts) };
+  const hooks = {
+    relogin: () => login.ensureLogin(page, loginOpts),
+    onProgress: data => reporter.update(data),
+  };
   const fin = await runner.run(page, ctx, config, hooks, log);
 
   const summary = {

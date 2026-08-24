@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "start": "node start.js",
-    "check": "node --check start.js && node --check byyxt-autoplay.user.js && node --check src/env.js && node --check src/captcha.js && node --check src/login.js && node --check src/runner.js"
+    "check": "node --check start.js && node --check byyxt-autoplay.user.js && node --check src/env.js && node --check src/captcha.js && node --check src/login.js && node --check src/runner.js && node --check src/reporter.js"
   },
   "dependencies": {
     "playwright": "^1.62.1"
