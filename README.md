@@ -1,6 +1,6 @@
 # byyxt-autoplay
 
-自动播放 [byyxt.pupedu.cn](https://byyxt.pupedu.cn)(北京大学出版社「云学堂」,底层为 Readoor 平台)培训任务中全部视频的命令行工具与油猴脚本。
+自动播放 [byyxt.pupedu.cn](https://byyxt.pupedu.cn)(北京大学出版社「云学堂」,底层为 Readoor 平台)培训任务中全部视频的命令行工具。
 
 一条命令完成:**自动登录 → 逐个视频自动播放 → 全部完成后输出结果**。
 
