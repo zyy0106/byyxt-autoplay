@@ -85,23 +85,44 @@ const HELP = `
 `;
 
 /* ---------------- 交互输入 ---------------- */
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  terminal: !!process.stdin.isTTY,
+});
+let pendingResolver = null;
+rl.on('line', line => {
+  if (pendingResolver) {
+    const r = pendingResolver;
+    pendingResolver = null;
+    r(line);
+  }
+});
+rl.on('close', () => {
+  if (pendingResolver) {
+    const r = pendingResolver;
+    pendingResolver = null;
+    r('');
+  }
+});
+
 function ask(question) {
-  return new Promise(resolve => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(question, a => { rl.close(); resolve(a); });
-  });
+  process.stdout.write(question);
+  return new Promise(resolve => { pendingResolver = resolve; });
 }
 
 function askHidden(question) {
+  // 非终端(管道/重定向)输入不回显,直接按普通输入处理
+  if (!process.stdin.isTTY) return ask(question);
   return new Promise(resolve => {
     let buf = '';
     const finish = val => {
       try {
         process.stdin.setRawMode(false);
-        process.stdin.pause();
         process.stdin.removeListener('data', onData);
       } catch {}
       process.stdout.write('\n');
+      rl.resume();
       resolve(val);
     };
     const onData = c => {
@@ -114,13 +135,17 @@ function askHidden(question) {
       }
     };
     process.stdout.write(question);
+    rl.pause();
     try {
       process.stdin.setRawMode(true);
       process.stdin.resume();
       process.stdin.on('data', onData);
     } catch {
       // 不支持 raw mode 时退化为明文输入
-      ask(question).then(resolve);
+      process.stdout.write('\n');
+      rl.resume();
+      const r = resolve;
+      pendingResolver = r;
     }
   });
 }
