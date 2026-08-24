@@ -318,7 +318,8 @@ async function main() {
 
   const summary = {
     time: new Date().toISOString(),
-    ok: !!(fin && fin.onList && fin.pending === 0),
+    ok: fin?.stopReason === 'done',
+    stopReason: fin?.stopReason,
     pending: fin?.pending,
     done: fin?.state?.doneCount,
     status: fin?.status,

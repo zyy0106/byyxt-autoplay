@@ -48,6 +48,20 @@ export async function run(page, ctx, config, hooks, log) {
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await sleep(2000);
 
+  let authIssue = false;
+  const onResponse = r => {
+    const st = r.status();
+    if ((st === 401 || st === 403) &&
+      /pupedu\.cn|readoor\.cn/.test(r.url()) &&
+      !/login|oauth|idaas|token/.test(r.url())) {
+      if (!authIssue) {
+        authIssue = true;
+        log('检测到平台接口返回 ' + st + ',登录可能已失效或设备数超限: ' + r.url().slice(0, 120));
+      }
+    }
+  };
+  page.on('response', onResponse);
+
   const snapshot = () => page.evaluate(() => {
     const items = [...document.querySelectorAll('.categroy_item')];
     let pending = 0;
@@ -75,6 +89,7 @@ export async function run(page, ctx, config, hooks, log) {
       isViewer,
       onList,
       loggedOut: !token && !isViewer && !onList,
+      limited: /登录超过最大限制数|登录设备数超限|已在别处登录|账号在其它设备登录/.test(document.body.innerText || ''),
     };
   }).catch(() => null);
 
@@ -82,6 +97,7 @@ export async function run(page, ctx, config, hooks, log) {
   let lastKey = '';
   let stopped = false;
   let final = null;
+  let stopReason = null;
   const parseCurrent = status => {
     const a = /打开: (.+)$/.exec(status || '');
     if (a) return a[1];
@@ -110,6 +126,21 @@ export async function run(page, ctx, config, hooks, log) {
           ? `进度 ${done}/${total} (${pct}%) · 剩余 ${total - done} · ${eta} · 状态: ${s.status}`
           : `状态: ${s.status}`);
       }
+      if (authIssue) {
+        log('⚠ 因登录失效停止:请在其他设备退出登录(或等待平台解除限制)后重新运行');
+        await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
+        stopReason = 'auth';
+        await sleep(4000);
+        break;
+      }
+      if (s.limited && !stopped) {
+        log('⚠ 警告:检测到该账号存在其他登录(登录设备数超限),平台可能拒绝完成上报,已停止。请在其他设备退出登录后重试');
+        await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
+        stopped = true;
+        stopReason = 'limited';
+        await sleep(4000);
+        break;
+      }
       if (hooks.onProgress) {
         try {
           hooks.onProgress({
@@ -132,6 +163,7 @@ export async function run(page, ctx, config, hooks, log) {
         const ok = await hooks.relogin().catch(() => false);
         if (!ok) {
           log('重新登录失败,程序停止');
+          stopReason = 'auth';
           break;
         }
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
@@ -144,6 +176,7 @@ export async function run(page, ctx, config, hooks, log) {
         log(`已达到 limit=${limit},发出停止标记`);
         await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
         stopped = true;
+        stopReason = 'limit';
         await sleep(15000);
         break;
       }
@@ -151,6 +184,7 @@ export async function run(page, ctx, config, hooks, log) {
       // 全部完成
       if (s.onList && (s.status.includes('没有待处理') || (s.totalItems > 0 && s.pending === 0 && total !== null))) {
         log('✅ 全部视频已处理完成');
+        stopReason = 'done';
         await sleep(5000);
         break;
       }
@@ -169,6 +203,7 @@ export async function run(page, ctx, config, hooks, log) {
             .map(el => el.querySelector('.categroy_item_left span')?.textContent?.trim() || '(未知)');
         }).catch(() => []);
         log('脚本已停止,剩余未完成:', JSON.stringify(remain));
+        stopReason = 'incomplete';
         break;
       }
     }
@@ -176,12 +211,14 @@ export async function run(page, ctx, config, hooks, log) {
     if (Date.now() - start > timeoutMs) {
       log('达到总超时,发出停止标记');
       await page.evaluate(() => sessionStorage.setItem('__byyxt_autoplay_stop__', '1')).catch(() => {});
+      stopReason = 'timeout';
       await sleep(12000);
       break;
     }
     await sleep(3000);
   }
 
+  try { page.off('response', onResponse); } catch {}
   final = await snapshot();
   if (hooks.onProgress) {
     try {
@@ -199,5 +236,5 @@ export async function run(page, ctx, config, hooks, log) {
       });
     } catch {}
   }
-  return final;
+  return { ...final, stopReason };
 }

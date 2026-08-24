@@ -196,6 +196,12 @@ export async function ensureLogin(page, opts) {
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await sleep(6000);
   if (await hasToken(page, targetUrl)) return true;
+  const limited = await page.evaluate(() =>
+    /登录超过最大限制数|登录设备数超限|已在别处登录|账号在其它设备登录/.test(document.body.innerText)).catch(() => false);
+  if (limited) {
+    log('⚠ 警告:该账号登录设备数超限(可能存在其他设备登录),请先在其他设备退出登录后再试');
+    return false;
+  }
   if (!(await openLoginDialog(page, log))) return false;
 
   const platformHost = new URL(page.url()).host;

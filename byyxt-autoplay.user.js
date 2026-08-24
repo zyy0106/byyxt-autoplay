@@ -42,6 +42,7 @@
     currentName: '',
     totalPending: null,
     doneCount: 0,
+    playCounts: {},
     attempts: {},   // 课程名 -> 尝试次数
     skip: [],       // 跳过名单
   };
@@ -56,7 +57,7 @@
     try { sessionStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) {}
   }
   function resetState() {
-    state = { running: false, paused: false, stopped: false, returnUrl: '', currentName: '', totalPending: null, doneCount: 0, attempts: {}, skip: [] };
+    state = { running: false, paused: false, stopped: false, returnUrl: '', currentName: '', totalPending: null, doneCount: 0, playCounts: {}, attempts: {}, skip: [] };
     try { sessionStorage.removeItem(STATE_KEY); } catch (e) {}
   }
 
@@ -149,6 +150,12 @@
   }
   const isTrainingPage = () => /\/statudentsHomeDetails/.test(location.pathname);
   const isViewerPage = () => /\/c\/pc\/viewer|\/e-textbook2/.test(location.pathname);
+  const loginLimited = () => /登录超过最大限制数|登录设备数超限|已在别处登录|账号在其它设备登录/.test(document.body ? document.body.innerText : '');
+  const warnStop = msg => {
+    state.running = false;
+    saveState();
+    setStatus(msg);
+  };
 
   /* ====================== 悬浮面板 ====================== */
   let panel = null, statusEl = null;
@@ -241,13 +248,16 @@
         return;
       }
     } catch (e) {}
+    if (loginLimited()) { warnStop('⚠ 检测到该账号存在其他登录(登录设备数超限),已停止。请在其他设备退出登录后重试'); return; }
     await waitFor(() => document.querySelector('.categroy_item'), 30000);
     let items = getPendingVideos();
     if (!items.length) {
+      if (loginLimited()) { warnStop('⚠ 检测到该账号存在其他登录(登录设备数超限),已停止。请在其他设备退出登录后重试'); return; }
       await clickTabByName('内容目录');
       await waitFor(() => document.querySelector('.categroy_item'), 15000);
       items = getPendingVideos();
     }
+    if (loginLimited()) { warnStop('⚠ 检测到该账号存在其他登录(登录设备数超限),已停止。请在其他设备退出登录后重试'); return; }
     if (!items.length) {
       setStatus('✅ 没有待处理的视频(已全部完成或已跳过)');
       state.running = false;
@@ -260,6 +270,24 @@
     }
     const item = items[0];
     const name = getItemName(item);
+    const played = (state.playCounts && state.playCounts[name]) || 0;
+    if (played >= 2) {
+      if (!state.skip.includes(name)) {
+        state.skip.push(name);
+        saveState();
+      }
+      if (items.length <= 1) {
+        state.running = false;
+        saveState();
+        setStatus('⚠ 同一视频反复播放仍未被标记完成,可能是登录失效或任务未开放,已停止');
+        return;
+      }
+      setStatus(`跳过反复无法完成的视频: ${name}`);
+      await sleep(300);
+      trainingLoop();
+      return;
+    }
+    state.playCounts[name] = played + 1;
     state.currentName = name;
     state.returnUrl = location.href;
     saveState();
@@ -316,6 +344,7 @@
     }
     const iv = setInterval(() => {
       if (finished) return;
+      if (loginLimited()) { finish(); return; }
       if (State.doneReported || video.ended) { finish(); return; }
       try {
         if (video.paused && !video.ended) { const p = video.play(); if (p && p.catch) p.catch(() => {}); }
@@ -344,6 +373,7 @@
 
   async function viewerLoop() {
     if (!state.running || state.stopped) return;
+    if (loginLimited()) { warnStop('⚠ 检测到该账号存在其他登录(登录设备数超限),已停止。请在其他设备退出登录后重试'); return; }
     setStatus(`播放中: ${state.currentName || '(课程)'}`);
     const guid = new URLSearchParams(location.search).get('section_guid');
 
