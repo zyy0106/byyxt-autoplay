@@ -208,6 +208,12 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(HELP); return; }
 
+  const nodeMajor = Number(String(process.versions.node).split('.')[0]);
+  if (!Number.isFinite(nodeMajor) || nodeMajor < 18) {
+    console.error('[byyxt] 当前 Node.js 版本过低(' + process.versions.node + '),需要 v18 或更新版本。请升级后重试,或直接双击 start.bat 自动安装便携版。');
+    process.exit(1);
+  }
+
   const config = {
     ...DEFAULTS,
     ...loadConfig(),

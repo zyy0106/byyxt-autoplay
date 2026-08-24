@@ -21,3 +21,13 @@ jobs:
 
       - name: Python 语法检查
         run: python3 -m py_compile ocr/captcha_ocr.py
+
+      - name: Shell 语法检查
+        run: bash -n tools/install-node.sh
+
+      - name: PowerShell 语法检查
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('tools/install-node.ps1', [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }

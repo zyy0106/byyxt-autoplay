@@ -28,50 +28,84 @@
 │   ├── login.js             # 登录流程(CAS / 密码登录)
 │   └── runner.js            # 浏览器执行与进度监控
 ├── ocr/captcha_ocr.py       # 验证码识别服务(OpenCV + ddddocr)
+├── tools/install-node.*     # Node.js 缺失/过旧时自动下载便携版
 └── .github/workflows/ci.yml # 语法检查 CI
 ```
 
 ## 快速开始
 
-## 第 1 步:安装 Node.js
- ```
-   https://nodejs.org/zh-cn
-   ```
-> 装完即可,不需要再打开 Node.js 。
+**第一次用,照着这份图文步骤走即可,不用懂电脑:**
 
-## 第 2 步:下载本仓库
-   ```
-   https://github.com/zyy0106/byyxt-autoplay
-   ```
-下载到任意位置均可。
-## 第 3 步:准备网址
+1. 在本仓库点绿色 **“<> Code” → “Download ZIP”**,解压;
+2. 双击 **`start.bat`**(Windows)——若检测不到 Node.js 或版本低于 18,会自动下载一个**便携版 Node.js** 到本目录(约 30MB,**不需要管理员权限**,不修改系统);
+3. 黑窗口里按提示:粘贴任务页地址 → 输入账号 → 输入密码;
+4. 等它自动完成即可。
 
-1. 用浏览器正常打开云学堂网站并登录你的账号。
+→ 更详细的逐步骤说明(含截图位置描述、验证码、常见问题):[docs/新手指南.md](docs/新手指南.md)
 
-2. 点进你要完成的那个培训任务详情页。
+**稍微熟悉命令行**的用户也可以:
 
-3. 点一下浏览器最上面的URL复制。
+```bash
+git clone https://github.com/zyy0106/byyxt-autoplay.git
+cd byyxt-autoplay
+cp config.example.json config.json   # 填 targetUrl(或留空,运行时粘贴)
+npm install                          # 可选,程序也会自动装
+node start.js
+```
 
+首次运行会自动安装缺失的依赖(Node.js、Playwright、Chromium、验证码识别库),之后直接秒开。
 
-## 第 4 步:运行程序
+### Node.js 版本策略
 
-1. 运行仓库文件夹内的 `start.bat`；
+- 程序要求 **Node.js ≥ 18**;启动器会检测版本,缺失或过旧时自动下载便携版;
+- 便携版默认使用 **v24.19.0**(经过完整测试),可用环境变量 `BYYXT_NODE_VERSION` 指定其他版本;指定版本下载失败时自动回退到最新 LTS;
+- 只有自动下载失败(如无网络)时,才需要手动安装:[https://nodejs.org/](https://nodejs.org/) 选 LTS 版。
 
-2. 第一次运行时它会自动下载组件,屏幕上会出现下载进度,等几分钟,期间**不要关窗口**；
+## 配置(config.json)
 
-3. 按照要求输入个人信息；
+| 字段 | 说明 | 默认 |
+| --- | --- | --- |
+| `targetUrl` | 任务详情页地址(`…/statudentsHomeDetails?training_id=…&spu_guid=…`) | 必填 |
+| `account` / `password` | 登录账号密码,留空则运行时交互输入 | 空 |
+| `playbackRate` | 播放倍速(浏览器最大 16) | 16 |
+| `mute` | 静音(静音才能绕过自动播放限制) | true |
+| `fastSeek` | 尝试直接跳到结尾(仅未开启防拖拽时有效,默认关更安全) | false |
+| `headless` | 无头运行;`false` 显示浏览器窗口(调试用) | true |
+| `browser` | `auto`(自带 Chromium)/ `chrome` / `edge` | auto |
+| `limit` | 只处理 N 个视频(测试用),0=全部 | 0 |
+| `timeoutMs` | 整体超时(毫秒) | 8 小时 |
+| `maxWatchMs` | 单视频最长等待,超时跳过继续 | 45 分钟 |
+| `profileDir` | 浏览器会话目录(登录态保存在此,重启免登录) | `.profile` |
+| `maxCaptchaAttempts` | 验证码最大尝试次数 | 8 |
+| `python` / `playwrightModuleDir` / `ocrDepsDir` | 高级:自定义运行环境路径,一般留空自动检测 | 空 |
 
-5. 之后完全自动:登录 → 逐个视频播放 → 自动切下一个。你什么都不用点。
+可选的本机特调文件 `config.local.json`(已 gitignore)会覆盖 `config.json`,适合保存机器相关路径。
 
-6. 黑色窗口里会持续显示进度：完成百分比、剩余数量、当前正在播哪个视频，你实时监测即可；
+## 命令行参数
 
-7. 最后出现:
+```bash
+node start.js --account 学号 --password 密码 --target "任务页URL" --limit 3
+node start.js --headful            # 显示浏览器窗口
+node start.js --browser chrome     # 使用系统 Chrome
+node start.js --force              # 忽略运行锁
+node start.js --help
+```
 
-   ```
-   Finished. If no red errors above, all done.
-   ```
+环境变量:`BYYXT_ACCOUNT`、`BYYXT_PASSWORD`、`BYYXT_TARGET`、`BYYXT_LIMIT`、`BYYXT_BROWSER`、`BYYXT_PYTHON`。
 
-   则自动播放视频完成。
+## 实时进度
+
+- 运行时黑色窗口会持续显示:已完成数量、百分比、剩余数量、预计剩余时间、当前视频;
+- 进度同时写入 `progress.json`(实时覆盖),供其他程序读取;
+- 结束后的汇总写入 `result.json`。
+
+## 油猴脚本(替代方案)
+
+适合平时已在浏览器登录的用户:
+
+1. 安装 [Tampermonkey](https://www.tampermonkey.net/);
+2. 新建脚本,粘贴 [byyxt-autoplay.user.js](byyxt-autoplay.user.js) 全部内容并保存;
+3. 打开任务详情页即自动开始,右下角悬浮面板可暂停/停止。
 
 ## 工作原理
 
@@ -79,6 +113,14 @@
 - 完成状态通过 `stat/pStatIf` 接口上报,脚本监听该接口并解密请求(平台前端内置固定 AES 密钥),服务端确认 `done=1` 后立即切换下一个视频;
 - 登录走平台「统一身份认证」(如 `iaaa.pku.edu.cn`),密码由页面自带 JS 用 RSA 加密提交;
 - 图片验证码由本地 ddddocr 识别,失败自动「换一张」重试并最终转人工。
+
+## 常见问题
+
+- **账号是学号,提示密码登录不接受?** 该通道只支持手机号/邮箱,请使用「统一身份认证」入口(程序默认优先)。
+- **验证码一直识别错误?** 程序会自动换图重试;仍失败时会弹出图片让你人工输入。
+- **Node.js 自动下载失败?** 检查网络后重试;仍失败就手动到 https://nodejs.org/ 安装 LTS 版。
+- **中断了怎么办?** 完成状态保存在平台服务端,重新运行只会处理剩余视频。
+- **下载依赖慢?** 先配置 npm / pip 国内镜像再运行。
 
 ## 开发
 

@@ -1,5 +1,6 @@
 # 运行时生成的本地文件
 node_modules/
+runtime/
 pylibs/
 .profile/
 tmp/
