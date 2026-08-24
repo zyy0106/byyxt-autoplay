@@ -31,7 +31,8 @@ export function resolvePython(config) {
     const base = path.basename(candidate).toLowerCase();
     const pythonArgs = (base === 'py.exe' || base === 'py') ? ['-3'] : [];
     try {
-      const r = spawnSync(candidate, [...pythonArgs, '--version'], { stdio: 'ignore' });
+      // 加超时:防止“Microsoft Store 空壳 python.exe”弹商店导致卡死
+      const r = spawnSync(candidate, [...pythonArgs, '--version'], { stdio: 'ignore', timeout: 15000 });
       if (r.status === 0) return { python: candidate, pythonArgs };
     } catch {}
   }
@@ -117,7 +118,7 @@ export async function ensureDependencies(config, log) {
   let ocrReady = false;
   if (python) {
     const check = spawnSync(python, [...pythonArgs, '-c', 'import ddddocr'],
-      { env: { ...process.env, PYTHONPATH: ocrDepsDir }, stdio: 'ignore' });
+      { env: { ...process.env, PYTHONPATH: ocrDepsDir }, stdio: 'ignore', timeout: 30000 });
     if (check.status !== 0) {
       log('未检测到验证码识别依赖,正在自动安装(需联网)…');
       const r = spawnSync(python, [...pythonArgs, '-m', 'pip', 'install',
@@ -126,7 +127,7 @@ export async function ensureDependencies(config, log) {
         { cwd: projectDir, stdio: 'inherit' });
       if (r.status === 0) {
         const recheck = spawnSync(python, [...pythonArgs, '-c', 'import ddddocr'],
-          { env: { ...process.env, PYTHONPATH: ocrDepsDir }, stdio: 'ignore' });
+          { env: { ...process.env, PYTHONPATH: ocrDepsDir }, stdio: 'ignore', timeout: 30000 });
         ocrReady = recheck.status === 0;
       }
     } else {
